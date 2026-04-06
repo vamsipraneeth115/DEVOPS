@@ -1,5 +1,9 @@
 pipeline {
     agent any
+
+    environment {
+        DOCKER_FALLBACK = 'C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe'
+    }
     
     stages {
         stage('Checkout') {
@@ -50,8 +54,24 @@ pipeline {
             steps {
                 echo 'Building Docker image'
                 bat '''
-                    docker --version
-                    docker build -t disease-predictor:latest -f Dockerfile .
+                    setlocal
+                    set "DOCKER_CMD=docker"
+                    if exist "%DOCKER_FALLBACK%" set "DOCKER_CMD=%DOCKER_FALLBACK%"
+
+                    call "%DOCKER_CMD%" --version
+                    if errorlevel 1 (
+                        echo Docker CLI not found for Jenkins. Ensure Docker Desktop is installed and available to the Jenkins service.
+                        exit /b 1
+                    )
+
+                    call "%DOCKER_CMD%" info >nul 2>&1
+                    if errorlevel 1 (
+                        echo Docker daemon is not reachable from Jenkins.
+                        echo If Jenkins runs as a Windows service, run it under your user account or grant it access to Docker Desktop.
+                        exit /b 1
+                    )
+
+                    call "%DOCKER_CMD%" build -t disease-predictor:latest -f Dockerfile .
                 '''
             }
         }
@@ -60,10 +80,14 @@ pipeline {
             steps {
                 echo 'Testing Docker container'
                 bat '''
-                    docker run -d --name disease-predictor-test -p 8501:8501 disease-predictor:latest
+                    setlocal
+                    set "DOCKER_CMD=docker"
+                    if exist "%DOCKER_FALLBACK%" set "DOCKER_CMD=%DOCKER_FALLBACK%"
+
+                    call "%DOCKER_CMD%" run -d --name disease-predictor-test -p 8501:8501 disease-predictor:latest
                     timeout /t 5
-                    docker stop disease-predictor-test
-                    docker rm disease-predictor-test
+                    call "%DOCKER_CMD%" stop disease-predictor-test
+                    call "%DOCKER_CMD%" rm disease-predictor-test
                 '''
             }
         }
