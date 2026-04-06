@@ -102,7 +102,7 @@ pipeline {
                     set "DOCKER_CMD=docker"
                     if exist "%DOCKER_FALLBACK%" set "DOCKER_CMD=%DOCKER_FALLBACK%"
 
-                    call "%DOCKER_CMD%" run -d --name disease-predictor-test -p 8501:8501 disease-predictor:latest
+                    call "%DOCKER_CMD%" run -d --name disease-predictor-test -p 8502:8502 disease-predictor:latest
                     timeout /t 5
                     call "%DOCKER_CMD%" stop disease-predictor-test
                     call "%DOCKER_CMD%" rm disease-predictor-test
