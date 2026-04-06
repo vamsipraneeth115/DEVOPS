@@ -40,13 +40,16 @@ wheels/
 # model.pkl
 *.pkl
 
-# Data files (optional storage)
+# Data files required for Jenkins and Docker builds
 *.csv
-data/
+!data/
+data/*
+!data/Training.csv
+!data/Testing.csv
+data/backup/
 
 # Docker
 .docker/
-.dockerignore
 
 # Logs
 logs/

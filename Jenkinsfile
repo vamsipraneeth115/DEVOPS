@@ -12,6 +12,22 @@ pipeline {
                 checkout scm
             }
         }
+
+        stage('Verify Required Files') {
+            steps {
+                echo 'Verifying required dataset files'
+                bat '''
+                    if not exist data\\Training.csv (
+                        echo Missing required file: data\\Training.csv
+                        exit /b 1
+                    )
+                    if not exist data\\Testing.csv (
+                        echo Missing required file: data\\Testing.csv
+                        exit /b 1
+                    )
+                '''
+            }
+        }
         
         stage('Install Dependencies') {
             steps {
@@ -41,11 +57,7 @@ pipeline {
                 echo 'Training machine learning model'
                 bat '''
                     call venv\\Scripts\\activate.bat
-                    if exist data\\Training.csv (
-                        python train.py
-                    ) else (
-                        echo Data files not found, skipping training
-                    )
+                    python train.py
                 '''
             }
         }
@@ -102,8 +114,17 @@ pipeline {
                     set "DOCKER_CMD=docker"
                     if exist "%DOCKER_FALLBACK%" set "DOCKER_CMD=%DOCKER_FALLBACK%"
 
-                    call "%DOCKER_CMD%" run -d --name disease-predictor-test -p 8502:8502 disease-predictor:latest
-                    timeout /t 5
+                    call "%DOCKER_CMD%" rm -f disease-predictor-test >nul 2>&1
+                    call "%DOCKER_CMD%" run -d --name disease-predictor-test disease-predictor:latest
+                    timeout /t 15 /nobreak >nul
+                    call "%DOCKER_CMD%" exec disease-predictor-test curl -f http://localhost:8502/_stcore/health
+                    if errorlevel 1 (
+                        echo Container health check failed. Printing logs...
+                        call "%DOCKER_CMD%" logs disease-predictor-test
+                        call "%DOCKER_CMD%" stop disease-predictor-test >nul 2>&1
+                        call "%DOCKER_CMD%" rm disease-predictor-test >nul 2>&1
+                        exit /b 1
+                    )
                     call "%DOCKER_CMD%" stop disease-predictor-test
                     call "%DOCKER_CMD%" rm disease-predictor-test
                 '''

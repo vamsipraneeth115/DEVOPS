@@ -1,7 +1,7 @@
 # Multi-stage Docker build for disease prediction application
 
 # Stage 1: Builder
-FROM python:3.11-slim as builder
+FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
@@ -32,10 +32,13 @@ COPY --from=builder /root/.local /root/.local
 COPY app.py .
 COPY train.py .
 COPY requirements.txt .
-COPY data ./data
 
 # Create data directory
 RUN mkdir -p data
+
+# Copy only the dataset files required to train the model.
+COPY data/Training.csv ./data/Training.csv
+COPY data/Testing.csv ./data/Testing.csv
 
 # Train the model during build so the runtime image is self-contained.
 RUN python train.py
