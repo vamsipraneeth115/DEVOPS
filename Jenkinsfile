@@ -95,7 +95,7 @@ pipeline {
 
                     set /a DOCKER_RETRIES+=1
                     echo Waiting for Docker daemon... attempt %DOCKER_RETRIES% of 12
-                    timeout /t 5 /nobreak >nul
+                    ping 127.0.0.1 -n 6 >nul
                     goto wait_for_docker
 
                     :docker_ready
@@ -116,15 +116,27 @@ pipeline {
 
                     call "%DOCKER_CMD%" rm -f disease-predictor-test >nul 2>&1
                     call "%DOCKER_CMD%" run -d --name disease-predictor-test disease-predictor:latest
-                    timeout /t 15 /nobreak >nul
-                    call "%DOCKER_CMD%" exec disease-predictor-test curl -f http://localhost:8502/_stcore/health
-                    if errorlevel 1 (
+
+                    set /a HEALTH_RETRIES=0
+                    :wait_for_container_health
+                    call "%DOCKER_CMD%" exec disease-predictor-test curl -f http://localhost:8502/_stcore/health >nul 2>&1
+                    if not errorlevel 1 goto container_ready
+
+                    if %HEALTH_RETRIES% GEQ 12 (
                         echo Container health check failed. Printing logs...
                         call "%DOCKER_CMD%" logs disease-predictor-test
                         call "%DOCKER_CMD%" stop disease-predictor-test >nul 2>&1
                         call "%DOCKER_CMD%" rm disease-predictor-test >nul 2>&1
                         exit /b 1
                     )
+
+                    set /a HEALTH_RETRIES+=1
+                    echo Waiting for container health... attempt %HEALTH_RETRIES% of 12
+                    ping 127.0.0.1 -n 6 >nul
+                    goto wait_for_container_health
+
+                    :container_ready
+                    echo Container health check passed.
                     call "%DOCKER_CMD%" stop disease-predictor-test
                     call "%DOCKER_CMD%" rm disease-predictor-test
                 '''
