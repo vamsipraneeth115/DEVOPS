@@ -32,9 +32,13 @@ COPY --from=builder /root/.local /root/.local
 COPY app.py .
 COPY train.py .
 COPY requirements.txt .
+COPY data ./data
 
 # Create data directory
 RUN mkdir -p data
+
+# Train the model during build so the runtime image is self-contained.
+RUN python train.py
 
 # Set PATH to use local pip packages
 ENV PATH=/root/.local/bin:$PATH
