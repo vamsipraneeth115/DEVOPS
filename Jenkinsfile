@@ -213,37 +213,40 @@ pipeline {
     
     post {
         success {
-            echo '╔════════════════════════════════════╗'
-            echo '║  ✓ PIPELINE COMPLETED SUCCESSFULLY  ║'
-            echo '╚════════════════════════════════════╝'
-            
             bat '''
                 echo.
-                echo Build Summary:
-                echo - Build Status: SUCCESS
-                echo - Build Number: %BUILD_NUMBER%
-                echo - Docker Image: %IMAGE_NAME%:latest
+                echo ========================================
+                echo BUILD COMPLETED SUCCESSFULLY
+                echo ========================================
                 echo.
-                echo To run the container locally:
+                echo Build Number: %BUILD_NUMBER%
+                echo Docker Image: %IMAGE_NAME%
+                echo.
+                echo To run container:
                 echo docker run -p 8501:8501 %IMAGE_NAME%:latest
                 echo.
+                echo ========================================
             '''
         }
         
         failure {
-            echo '╔════════════════════════════════════╗'
-            echo '║  ✗ PIPELINE FAILED                  ║'
-            echo '╚════════════════════════════════════╝'
-            
             bat '''
-                echo Build #%BUILD_NUMBER% failed
+                echo.
+                echo ========================================
+                echo BUILD FAILED
+                echo ========================================
+                echo Build Number: %BUILD_NUMBER%
                 echo Check logs above for error details
+                echo ========================================
             '''
         }
         
         cleanup {
             bat '''
-                docker ps -a | findstr disease-predictor-test || echo No test containers found
+                docker ps -a 2>nul | findstr disease-predictor-test >nul && (
+                    echo Cleaning up test containers...
+                    for /f "tokens=1" %%i in ('docker ps -a 2^>nul ^| findstr disease-predictor-test ^| awk "{print $1}"') do docker rm -f %%i 2>nul
+                ) || echo No test containers to clean
             '''
         }
     }
