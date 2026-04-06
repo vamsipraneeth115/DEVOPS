@@ -20,7 +20,7 @@ pipeline {
                 echo 'STAGE: Checking out code from GitHub'
                 echo '======================================'
                 checkout scm
-                sh 'echo "Repository checked out successfully"'
+                bat 'echo Repository checked out successfully'
             }
         }
         
@@ -30,18 +30,12 @@ pipeline {
                 echo 'STAGE: Installing Dependencies'
                 echo '======================================'
                 
-                sh '''
-                    # Create virtual environment
-                    python${PYTHON_VERSION} -m venv venv
-                    source venv/bin/activate
-                    
-                    # Upgrade pip
+                bat '''
+                    python -m venv venv
+                    call venv\\Scripts\\activate.bat
                     pip install --upgrade pip
-                    
-                    # Install dependencies
                     pip install -r requirements.txt
-                    
-                    echo "✓ Dependencies installed successfully"
+                    echo. && echo ✓ Dependencies installed successfully
                 '''
             }
         }
@@ -52,27 +46,18 @@ pipeline {
                 echo 'STAGE: Running Unit Tests'
                 echo '======================================'
                 
-                sh '''
-                    source venv/bin/activate
-                    
-                    # Check Python version
+                bat '''
+                    call venv\\Scripts\\activate.bat
                     python --version
-                    
-                    # Validate imports
                     python -c "import pandas; import numpy; import sklearn; import streamlit; print('✓ All imports successful')"
-                    
-                    # Check if data files exist
-                    if [ -f "data/Training.csv" ]; then
-                        echo "✓ Training data found"
-                        wc -l data/Training.csv
-                    else
-                        echo "⚠ Training data not found - will use sample data"
-                    fi
-                    
-                    if [ -f "data/Testing.csv" ]; then
-                        echo "✓ Testing data found"
-                        wc -l data/Testing.csv
-                    fi
+                    if exist data\\Training.csv (
+                        echo ✓ Training data found
+                    ) else (
+                        echo ⚠ Training data not found
+                    )
+                    if exist data\\Testing.csv (
+                        echo ✓ Testing data found
+                    )
                 '''
             }
         }
@@ -83,26 +68,24 @@ pipeline {
                 echo 'STAGE: Training Machine Learning Model'
                 echo '======================================'
                 
-                sh '''
-                    source venv/bin/activate
+                bat '''
+                    call venv\\Scripts\\activate.bat
                     
-                    # Run training script
-                    if [ -f "data/Training.csv" ] && [ -f "data/Testing.csv" ]; then
-                        echo "Training model with data..."
-                        python train.py
-                        
-                        # Check if model was created
-                        if [ -f "model.pkl" ]; then
-                            echo "✓ Model trained and saved successfully"
-                            ls -lh model.pkl
-                        else
-                            echo "✗ Model training failed - model.pkl not found"
-                            exit 1
-                        fi
-                    else
-                        echo "⚠ Skipping training - data files not found in pipeline"
-                        echo "Note: Ensure data/Training.csv and data/Testing.csv are present"
-                    fi
+                    if exist data\\Training.csv (
+                        if exist data\\Testing.csv (
+                            echo Training model with data...
+                            python train.py
+                            if exist model.pkl (
+                                echo ✓ Model trained and saved successfully
+                                dir model.pkl
+                            ) else (
+                                echo ✗ Model training failed
+                                exit /b 1
+                            )
+                        )
+                    ) else (
+                        echo ⚠ Skipping training - data files not found
+                    )
                 '''
             }
         }
@@ -113,16 +96,11 @@ pipeline {
                 echo 'STAGE: Building Docker Image'
                 echo '======================================'
                 
-                sh '''
+                bat '''
                     docker --version
-                    
-                    # Build Docker image
-                    docker build -t ${FULL_IMAGE_NAME} \
-                        --build-arg PYTHON_VERSION=${PYTHON_VERSION} \
-                        -f Dockerfile .
-                    
-                    echo "✓ Docker image built successfully"
-                    docker images | grep ${IMAGE_NAME}
+                    docker build -t %IMAGE_NAME%:latest -f Dockerfile .
+                    echo ✓ Docker image built successfully
+                    docker images | findstr %IMAGE_NAME%
                 '''
             }
         }
@@ -133,14 +111,12 @@ pipeline {
                 echo 'STAGE: Scanning Docker Image'
                 echo '======================================'
                 
-                sh '''
-                    # Get image details
-                    echo "Docker Image Inspection:"
-                    docker inspect ${FULL_IMAGE_NAME} | head -50
-                    
-                    # Check image layers
-                    echo "Image Layers:"
-                    docker history ${FULL_IMAGE_NAME}
+                bat '''
+                    echo Docker Image Inspection:
+                    docker inspect %IMAGE_NAME%:latest
+                    echo.
+                    echo Image Layers:
+                    docker history %IMAGE_NAME%:latest
                 '''
             }
         }
@@ -154,15 +130,11 @@ pipeline {
                 echo 'STAGE: Pushing Docker Image to Registry'
                 echo '======================================'
                 
-                sh '''
-                    # Note: In production, configure Docker registry credentials
-                    echo "✓ Image ready for push: ${FULL_IMAGE_NAME}"
-                    
-                    # Uncomment below for actual registry push
-                    # docker login -u ${REGISTRY_USER} -p ${REGISTRY_PASSWORD} ${REGISTRY}
-                    # docker push ${FULL_IMAGE_NAME}
-                    # docker tag ${FULL_IMAGE_NAME} ${REGISTRY}/${IMAGE_NAME}:latest
-                    # docker push ${REGISTRY}/${IMAGE_NAME}:latest
+                bat '''
+                    echo ✓ Image ready for push: %IMAGE_NAME%:latest
+                    REM Uncomment below for actual registry push
+                    REM docker login -u %REGISTRY_USER% -p %REGISTRY_PASSWORD% %REGISTRY%
+                    REM docker push %IMAGE_NAME%:latest
                 '''
             }
         }
@@ -173,37 +145,23 @@ pipeline {
                 echo 'STAGE: Testing Docker Container'
                 echo '======================================'
                 
-                sh '''
-                    # Run container in background
-                    docker run -d \
-                        --name disease-predictor-test-${BUILD_NUMBER} \
-                        -p 8501:8501 \
-                        ${FULL_IMAGE_NAME} &
+                bat '''
+                    echo Starting test container...
+                    docker run -d --name disease-predictor-test-%BUILD_NUMBER% -p 8501:8501 %IMAGE_NAME%:latest
+                    timeout /t 10
                     
-                    sleep 10
+                    if docker ps | findstr disease-predictor-test-%BUILD_NUMBER% (
+                        echo ✓ Container started successfully
+                        docker ps | findstr disease-predictor-test-%BUILD_NUMBER%
+                    ) else (
+                        echo ✗ Container failed to start
+                        docker logs disease-predictor-test-%BUILD_NUMBER%
+                        exit /b 1
+                    )
                     
-                    # Check if container is running
-                    if docker ps | grep -q disease-predictor-test-${BUILD_NUMBER}; then
-                        echo "✓ Container started successfully"
-                        docker ps | grep disease-predictor-test-${BUILD_NUMBER}
-                    else
-                        echo "✗ Container failed to start"
-                        docker logs disease-predictor-test-${BUILD_NUMBER}
-                        exit 1
-                    fi
-                    
-                    # Test API/Health
-                    sleep 5
-                    
-                    if curl -f http://localhost:8501/_stcore/health > /dev/null 2>&1; then
-                        echo "✓ Health check passed"
-                    else
-                        echo "⚠ Health check failed (may be expected for Streamlit)"
-                    fi
-                    
-                    # Cleanup
-                    docker stop disease-predictor-test-${BUILD_NUMBER}
-                    docker rm disease-predictor-test-${BUILD_NUMBER}
+                    echo Stopping test container...
+                    docker stop disease-predictor-test-%BUILD_NUMBER%
+                    docker rm disease-predictor-test-%BUILD_NUMBER%
                 '''
             }
         }
@@ -214,48 +172,39 @@ pipeline {
                 echo 'STAGE: Generating Deployment Report'
                 echo '======================================'
                 
-                sh '''
-                    cat > deployment-report.txt << EOF
-========================================
-DEPLOYMENT REPORT - Build #${BUILD_NUMBER}
-========================================
-
-Build Status: SUCCESS
-
-Image Information:
-- Image Name: ${IMAGE_NAME}
-- Image Tag: ${IMAGE_TAG}
-- Full Image Name: ${FULL_IMAGE_NAME}
-- Registry: ${REGISTRY}
-
-Build Artifacts:
-- Python Version: ${PYTHON_VERSION}
-- Model File: model.pkl
-- Application: Streamlit (port 8501)
-
-Stages Completed:
-✓ Code Checkout
-✓ Dependency Installation
-✓ Unit Tests
-✓ Model Training
-✓ Docker Image Build
-✓ Image Quality Scan
-✓ Container Testing
-
-Deployment Status: Ready for Production
-
-Next Steps:
-1. Push image to Docker registry
-2. Deploy to orchestration platform (Kubernetes/Docker Swarm)
-3. Configure environment variables
-4. Mount data volumes if needed
-5. Set up monitoring and logging
-
-========================================
-Generated: $(date)
-========================================
-EOF
+                bat '''
+                    (
+                        echo ========================================
+                        echo DEPLOYMENT REPORT - Build %BUILD_NUMBER%
+                        echo ========================================
+                        echo.
+                        echo Build Status: SUCCESS
+                        echo.
+                        echo Image Information:
+                        echo - Image Name: %IMAGE_NAME%:latest
+                        echo - Registry: %REGISTRY%
+                        echo.
+                        echo Build Artifacts:
+                        echo - Model File: model.pkl
+                        echo - Application: Streamlit (port 8501
+                        echo.
+                        echo Stages Completed:
+                        echo ✓ Code Checkout
+                        echo ✓ Dependency Installation
+                        echo ✓ Unit Tests
+                        echo ✓ Model Training
+                        echo ✓ Docker Image Build
+                        echo ✓ Image Quality Scan
+                        echo ✓ Container Testing
+                        echo.
+                        echo Deployment Status: Ready for Production
+                        echo ========================================
+                    ) > deployment-report.txt
                     
+                    type deployment-report.txt
+                '''
+            }
+        }
                     cat deployment-report.txt
                 '''
             }
@@ -268,16 +217,16 @@ EOF
             echo '║  ✓ PIPELINE COMPLETED SUCCESSFULLY  ║'
             echo '╚════════════════════════════════════╝'
             
-            sh '''
-                echo ""
-                echo "Build Summary:"
-                echo "- Build Status: SUCCESS"
-                echo "- Build Number: ${BUILD_NUMBER}"
-                echo "- Docker Image: ${FULL_IMAGE_NAME}"
-                echo ""
-                echo "To run the container locally:"
-                echo "docker run -p 8501:8501 -v $(pwd)/data:/app/data ${FULL_IMAGE_NAME}"
-                echo ""
+            bat '''
+                echo.
+                echo Build Summary:
+                echo - Build Status: SUCCESS
+                echo - Build Number: %BUILD_NUMBER%
+                echo - Docker Image: %IMAGE_NAME%:latest
+                echo.
+                echo To run the container locally:
+                echo docker run -p 8501:8501 %IMAGE_NAME%:latest
+                echo.
             '''
         }
         
@@ -286,19 +235,15 @@ EOF
             echo '║  ✗ PIPELINE FAILED                  ║'
             echo '╚════════════════════════════════════╝'
             
-            sh '''
-                echo "Build #${BUILD_NUMBER} failed"
-                echo "Check logs above for error details"
+            bat '''
+                echo Build #%BUILD_NUMBER% failed
+                echo Check logs above for error details
             '''
         }
         
         cleanup {
-            sh '''
-                # Clean up temporary containers
-                docker ps -a | grep disease-predictor-test || true
-                
-                # Optional: Clean dangling images
-                # docker image prune -f
+            bat '''
+                docker ps -a | findstr disease-predictor-test || echo No test containers found
             '''
         }
     }
