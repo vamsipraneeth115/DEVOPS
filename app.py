@@ -10,6 +10,10 @@ import numpy as np
 import os
 from datetime import datetime
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(BASE_DIR, 'model.pkl')
+TRAINING_DATA_PATH = os.path.join(BASE_DIR, 'data', 'Training.csv')
+
 # Page configuration
 st.set_page_config(
     page_title="Disease Predictor",
@@ -88,12 +92,10 @@ with st.sidebar:
 @st.cache_resource
 def load_model():
     """Load pre-trained model"""
-    model_path = 'model.pkl'
-    
-    if not os.path.exists(model_path):
+    if not os.path.exists(MODEL_PATH):
         return None
-    
-    with open(model_path, 'rb') as f:
+
+    with open(MODEL_PATH, 'rb') as f:
         model = pickle.load(f)
     
     return model
@@ -103,7 +105,7 @@ def load_model():
 def get_feature_names():
     """Get feature names from training data"""
     try:
-        train_data = pd.read_csv('data/Training.csv')
+        train_data = pd.read_csv(TRAINING_DATA_PATH)
         return train_data.drop('prognosis', axis=1).columns.tolist()
     except:
         return None
@@ -113,7 +115,7 @@ def get_feature_names():
 def get_diseases():
     """Get disease classes from training data"""
     try:
-        train_data = pd.read_csv('data/Training.csv')
+        train_data = pd.read_csv(TRAINING_DATA_PATH)
         return sorted(train_data['prognosis'].unique().tolist())
     except:
         return None
@@ -128,8 +130,8 @@ if model is None or feature_names is None:
     st.error("❌ Error: Model or training data not found!")
     st.markdown("""
     ### Setup Instructions:
-    1. Ensure `model.pkl` exists in the current directory
-    2. Ensure `data/Training.csv` exists
+    1. Ensure `model.pkl` exists in the app directory
+    2. Ensure `data/Training.csv` exists in the app directory
     3. Run the training script: `python train.py`
     """)
     st.stop()
