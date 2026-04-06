@@ -64,12 +64,30 @@ pipeline {
                         exit /b 1
                     )
 
-                    call "%DOCKER_CMD%" info >nul 2>&1
+                    sc query com.docker.service | find "RUNNING" >nul 2>&1
                     if errorlevel 1 (
+                        echo Docker Desktop Service is stopped. Attempting to start it...
+                        net start com.docker.service >nul 2>&1
+                    )
+
+                    set /a DOCKER_RETRIES=0
+                    :wait_for_docker
+                    call "%DOCKER_CMD%" info >nul 2>&1
+                    if not errorlevel 1 goto docker_ready
+
+                    if %DOCKER_RETRIES% GEQ 12 (
                         echo Docker daemon is not reachable from Jenkins.
-                        echo If Jenkins runs as a Windows service, run it under your user account or grant it access to Docker Desktop.
+                        echo Ensure Docker Desktop is running and that the Jenkins service account can access Docker.
                         exit /b 1
                     )
+
+                    set /a DOCKER_RETRIES+=1
+                    echo Waiting for Docker daemon... attempt %DOCKER_RETRIES% of 12
+                    timeout /t 5 /nobreak >nul
+                    goto wait_for_docker
+
+                    :docker_ready
+                    echo Docker daemon is available.
 
                     call "%DOCKER_CMD%" build -t disease-predictor:latest -f Dockerfile .
                 '''
