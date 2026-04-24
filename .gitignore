@@ -51,6 +51,9 @@ data/backup/
 # Docker
 .docker/
 
+# Local Kubernetes tooling
+.tools/
+
 # Logs
 logs/
 *.log
